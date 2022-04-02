@@ -23,7 +23,7 @@ public class DbLockHelper {
     private static Logger logger = LoggerFactory.getLogger(DbLockHelper.class);
 
     public static boolean releaseLock(CosmosAsyncContainer container, DbLockItem currLock) throws Exception {
-        if (checkIfLocked(container, currLock.getToken())) {
+        if (checkIfLocked(container, currLock.getDb(), currLock.getToken())) {
             String msg = "Lock state error: expecting to be locked by us only!";
             logger.error(msg);
             throw new IllegalStateException(msg);
@@ -59,16 +59,16 @@ public class DbLockHelper {
         return true;
     }
 
-    public static DbLockItem requestLock(CosmosAsyncContainer container) throws Exception {
-        DbLockItem lockItem = DbLockItem.requestLock("fakedb");
+    public static DbLockItem requestLock(CosmosAsyncContainer container, String db) throws Exception {
+        DbLockItem lockItem = DbLockItem.requestLock(db);
         logger.warn("Checking if locked");
-        while (checkIfLocked(container)) {
+        while (checkIfLocked(container, db)) {
             Thread.sleep(SLEEP_INTERVAL);
         }
         logger.warn("Trying lock db");
         lockItem.setLockDt(System.currentTimeMillis());
         container.createItem(lockItem).block();
-        if (checkIfLocked(container, lockItem.getToken())) {
+        if (checkIfLocked(container, lockItem.getDb(), lockItem.getToken())) {
             // todo: rare case when it's also locked by others!!
             logger.error("TODO: rare case when it's also locked by others!!");
             return null;
@@ -78,13 +78,13 @@ public class DbLockHelper {
             return lockItem;
         }
     }
-    private static boolean checkIfLocked(CosmosAsyncContainer container) {
-        return checkIfLocked(container, null);
+    private static boolean checkIfLocked(CosmosAsyncContainer container, String db) {
+        return checkIfLocked(container, db, null);
     }
 
-    public static List<DbLockItem> queryLocks(CosmosAsyncContainer container) {
+    public static List<DbLockItem> queryLocks(CosmosAsyncContainer container, String db) {
         CosmosQueryRequestOptions options = new CosmosQueryRequestOptions();
-        options.setPartitionKey(new PartitionKey("db"));
+        options.setPartitionKey(new PartitionKey(db));
 
         // Simple query with a single property equality comparison
         // in SQL with SQL parameterization instead of inlining the
@@ -99,8 +99,8 @@ public class DbLockHelper {
         return executeQueryWithQuerySpec(container, querySpec);
     }
 
-    private static boolean checkIfLocked(CosmosAsyncContainer container, String lockToken) {
-        List<DbLockItem> lockItems = queryLocks(container);
+    private static boolean checkIfLocked(CosmosAsyncContainer container, String db, String lockToken) {
+        List<DbLockItem> lockItems = queryLocks(container, db);
 
         if (StringUtils.isNoneBlank(lockToken)) {
             // check if there are lock items with a different token than `lockToken`
@@ -117,18 +117,6 @@ public class DbLockHelper {
         } else {
             return !lockItems.isEmpty();
         }
-
-//        // Query using two properties within each document. WHERE Id = "" AND Address.City = ""
-//        // notice here how we are doing an equality comparison on the string value of City
-//
-//        paramList = new ArrayList<SqlParameter>();
-//        paramList.add(new SqlParameter("@id", "AndersenFamily"));
-//        paramList.add(new SqlParameter("@city", "Seattle"));
-//        querySpec = new SqlQuerySpec(
-//                "SELECT * FROM Families f WHERE f.id = @id AND f.Address.City = @city",
-//                paramList);
-//
-//        executeQueryWithQuerySpecPrintSingleResult(querySpec);
     }
 
     private static List<DbLockItem> executeQueryWithQuerySpec(CosmosAsyncContainer container, SqlQuerySpec querySpec) {

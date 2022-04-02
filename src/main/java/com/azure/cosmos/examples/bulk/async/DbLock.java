@@ -30,10 +30,10 @@ public class DbLock {
     public static void main(String[] args) {
         DbLock p = new DbLock();
 
-
+        String db = args[0];
         try {
             logger.info("Starting ASYNC main");
-            p.getStartedDemo();
+            p.getStartedDemo(db);
             logger.info("Demo complete, please hold while resources are released");
         } catch (Exception e) {
             e.printStackTrace();
@@ -48,7 +48,7 @@ public class DbLock {
         client.close();
     }
 
-    private void getStartedDemo() throws Exception {
+    private void getStartedDemo(String db) throws Exception {
 
         logger.info("Using Azure Cosmos DB endpoint: " + AccountSettings.HOST);
 
@@ -74,15 +74,18 @@ public class DbLock {
         database = client.getDatabase(databaseName);
         container = database.getContainer(containerName);
 
-        dbgDeleteLocks();
+        dbgDeleteLocks(db);
 
-        DbLockItem lockItem = DbLockHelper.requestLock(container);
-        Thread.sleep(5000); // doing stuff
+        DbLockItem lockItem = DbLockHelper.requestLock(container, db);
+        for (int i = 0; i < 10; i++) {
+            System.out.println(".... " + i);
+            Thread.sleep(5000); // doing stuff
+        }
         DbLockHelper.releaseLock(container, lockItem);
     }
 
-    private void dbgDeleteLocks() {
-        List<DbLockItem> locks = DbLockHelper.queryLocks(container);
+    private void dbgDeleteLocks(String db) {
+        List<DbLockItem> locks = DbLockHelper.queryLocks(container, db);
         locks.forEach(l -> DbLockHelper.dbgDeleteLockItem(container, l));
     }
 
