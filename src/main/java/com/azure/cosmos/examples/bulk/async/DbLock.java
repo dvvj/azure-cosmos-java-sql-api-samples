@@ -74,7 +74,7 @@ public class DbLock {
         database = client.getDatabase(databaseName);
         container = database.getContainer(containerName);
 
-        dbgDeleteLocks(db);
+//        dbgDeleteLocks(db);
 
         DbLockItem lockItem = DbLockHelper.requestLock(container, db);
         for (int i = 0; i < 10; i++) {
