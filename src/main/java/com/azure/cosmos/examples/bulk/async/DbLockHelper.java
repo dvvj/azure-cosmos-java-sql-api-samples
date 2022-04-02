@@ -14,12 +14,14 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 public class DbLockHelper {
     private static final Gson GSON = new Gson();
     private static int SLEEP_INTERVAL = 5000;
+    private static int RETRY_BACKOFF_INTERVAL = 10000;
     private static Logger logger = LoggerFactory.getLogger(DbLockHelper.class);
 
     public static boolean releaseLock(CosmosAsyncContainer container, DbLockItem currLock) throws Exception {
@@ -54,6 +56,11 @@ public class DbLockHelper {
         }
     }
 
+    private static void cancelAllLocks(CosmosAsyncContainer container, String db) {
+        List<DbLockItem> locks = DbLockHelper.queryLocks(container, db);
+        locks.forEach(l -> updateStatus(container, l, DbLockItem.STATUS_ABORTED));
+    }
+
     public static boolean dbgDeleteLockItem(CosmosAsyncContainer container, DbLockItem itemToDelete) {
         container.deleteItem(itemToDelete.getId(), new PartitionKey(itemToDelete.getDb())).block();
         return true;
@@ -70,8 +77,14 @@ public class DbLockHelper {
         container.createItem(lockItem).block();
         if (checkIfLocked(container, lockItem.getDb(), lockItem.getToken())) {
             // todo: rare case when it's also locked by others!!
-            logger.error("TODO: rare case when it's also locked by others!!");
-            return null;
+            // delete all locks and retry
+            logger.warn("Conflict detected: cancelling all active locks");
+            cancelAllLocks(container, db);
+            int backoffInterval = new Random().nextInt(RETRY_BACKOFF_INTERVAL) + 2000; // 2 - 12 sec
+            logger.warn("\tbackoff {} millis ...", backoffInterval);
+            Thread.sleep(backoffInterval);
+            logger.warn("\tretrying");
+            return requestLock(container, db);
         } else {
             // normal case when only locked by us
             logger.warn("\tlock obtained, token: {}", lockItem.getToken());

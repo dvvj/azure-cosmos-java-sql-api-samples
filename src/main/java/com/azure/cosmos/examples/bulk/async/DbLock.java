@@ -84,11 +84,6 @@ public class DbLock {
         DbLockHelper.releaseLock(container, lockItem);
     }
 
-    private void dbgDeleteLocks(String db) {
-        List<DbLockItem> locks = DbLockHelper.queryLocks(container, db);
-        locks.forEach(l -> DbLockHelper.dbgDeleteLockItem(container, l));
-    }
-
     private void prepareDbContainer() {
 
         createDatabaseIfNotExists();
